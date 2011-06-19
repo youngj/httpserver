@@ -7,7 +7,8 @@ class HTTPRequest
     public $uri;                // path component of URI, without query string, after decoding %xx entities
     public $http_version;       // version from the request line, e.g. "HTTP/1.1"
     public $query_string;       // query string, like "a=b&c=d"
-    public $headers;            // associative array of HTTP headers    
+    public $headers;            // associative array of HTTP headers
+    public $lc_headers;         // associative array of HTTP headers, with header names in lowercase
     public $content;            // content of POST request, if applicable    
     public $remote_addr;        // IP address of client, as string
     public $request_line;       // The HTTP request line exactly as it came from the client
@@ -71,9 +72,15 @@ class HTTPRequest
                 $start_headers = $end_req + 2;
                         
                 $headers_str = substr($header_buf, $start_headers, $end_headers - $start_headers);
-                $this->headers = $headers = HTTPServer::parse_headers($headers_str);
+                $this->headers = HTTPServer::parse_headers($headers_str);
+                
+                $this->lc_headers = array();
+                foreach ($this->headers as $k => $v)
+                {
+                    $this->lc_headers[strtolower($k)] = $v;
+                }                
 
-                $this->content_len = (int)@$headers['Content-Length'];
+                $this->content_len = (int)@$this->lc_headers['content-length'];
                 
                 $start_content = $end_headers + 4; // $end_headers is before last \r\n\r\n
                 
@@ -100,6 +107,11 @@ class HTTPRequest
         {
             $this->cur_state = static::READ_COMPLETE;
         }
+    }
+    
+    function get_header($name)
+    {
+        return @$this->lc_headers[strtolower($name)];
     }
     
     /*

@@ -156,7 +156,7 @@ class HTTPServer
         {
             echo $this->get_log_line($request);
             
-            if (@$request->headers['Connection'] == 'close' || $request->http_version != 'HTTP/1.1')
+            if ($request->get_header('Connection') == 'close' || $request->http_version != 'HTTP/1.1')
             {
                 $this->end_request($request);
             }
@@ -249,9 +249,8 @@ class HTTPServer
             return new HTTPResponse(404, "File not found");
         }    
         
-        $headers = $request->headers;
-        $content_length = @$headers['Content-Length'];        
-        
+        $content_length = $request->get_header('Content-Length');
+
         // see http://www.faqs.org/rfcs/rfc3875.html
         $cgi_env = array(
             'QUERY_STRING' => $request->query_string,
@@ -260,15 +259,15 @@ class HTTPServer
             'REDIRECT_STATUS' => 200,
             'SCRIPT_FILENAME' => $script_filename,            
             'SCRIPT_NAME' => pathinfo($script_filename, PATHINFO_BASENAME),
-            'SERVER_NAME' => @$headers['Host'],
+            'SERVER_NAME' => $request->get_header('Host'),
             'SERVER_PROTOCOL' => 'HTTP/1.1',
             'SERVER_SOFTWARE' => $this->server_id,
-            'CONTENT_TYPE' => @$headers['Content-Type'],
+            'CONTENT_TYPE' => $request->get_header('Content-Type'),
             'CONTENT_LENGTH' => $content_length,            
             'REMOTE_ADDR' => $request->remote_addr,
         );                
         
-        foreach ($headers as $name => $value)
+        foreach ($request->headers as $name => $value)
         {        
             $name = str_replace('-','_', $name);
             $name = strtoupper($name);
