@@ -21,7 +21,7 @@ class HTTPResponse
 
         if (!isset($headers['Content-Length']))
         {
-            $headers['Content-Length'] = strlen($content);
+            $headers['Content-Length'] = $this->get_content_length();
         }        
             
         $status_msg = static::$messages[$status];
@@ -38,6 +38,11 @@ class HTTPResponse
         
         return ob_get_clean();
     }
+    
+    function get_content_length()
+    {
+        return strlen($this->content);
+    }    
     
     /* 
      * HTTP status codes and messages originally from Kohana Request class

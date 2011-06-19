@@ -9,6 +9,8 @@ class HTTPRequest
     public $query_string;       // query string, like "a=b&c=d"
     public $headers;            // associative array of HTTP headers    
     public $content;            // content of POST request, if applicable    
+    public $remote_addr;        // IP address of client, as string
+    public $request_line;       // The HTTP request line exactly as it came from the client
                
     // internal fields to track the state of reading the HTTP request
     private $cur_state = 0;
@@ -27,6 +29,11 @@ class HTTPRequest
     function __construct($socket)
     {
         $this->socket = $socket;
+        
+        if (!socket_getpeername($socket, $this->remote_addr))
+        {
+            $this->remote_addr = '127.0.0.1';
+        }
     }
                             
     /* 
@@ -49,8 +56,8 @@ class HTTPRequest
 
                 // parse HTTP request line    
                 $end_req = strpos($header_buf, "\r\n"); 
-                $req_line = substr($header_buf, 0, $end_req);
-                $req_arr = explode(' ', $req_line, 3);
+                $this->request_line = substr($header_buf, 0, $end_req);
+                $req_arr = explode(' ', $this->request_line, 3);
 
                 $this->method = $req_arr[0];
                 $this->request_uri = $req_arr[1];

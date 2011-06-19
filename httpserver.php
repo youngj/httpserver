@@ -53,6 +53,18 @@ class HTTPServer
             && !preg_match('#/\.#', $uri);      // disallow dotfiles
     }    
     
+    /*
+     * Subclasses could override to output a log entry in a particular format
+     */    
+    function get_log_line($request)
+    {
+        $response = $request->response;        
+        $time = strftime("%H:%M:%S");
+        
+        // http://www.w3.org/Daemon/User/Config/Logging.html#common-logfile-format
+        return "{$request->remote_addr} - - [$time] \"{$request->request_line}\" {$response->status} {$response->get_content_length()}\n";
+    }      
+    
     function bind_error()
     {
         error_log("Could not start a web server on port {$this->port}.");    
@@ -142,10 +154,7 @@ class HTTPServer
         }
         else // done sending HTTP response
         {
-            $response = $request->response;
-            $len = strlen($response->content);
-            $client_num = (int)$client;
-            echo "($client_num) {$request->method} {$request->request_uri} => {$response->status} {$len}\n";
+            echo $this->get_log_line($request);
             
             if (@$request->headers['Connection'] == 'close' || $request->http_version != 'HTTP/1.1')
             {
@@ -256,13 +265,8 @@ class HTTPServer
             'SERVER_SOFTWARE' => $this->server_id,
             'CONTENT_TYPE' => @$headers['Content-Type'],
             'CONTENT_LENGTH' => $content_length,            
-        );        
-        
-        // Obtain REMOTE_ADDR from socket
-        if (!socket_getpeername($request->socket, $cgi_env['REMOTE_ADDR'])) 
-        {
-            $cgi_env['REMOTE_ADDR'] = '127.0.0.1';
-        }
+            'REMOTE_ADDR' => $request->remote_addr,
+        );                
         
         foreach ($headers as $name => $value)
         {        
