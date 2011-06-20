@@ -25,11 +25,14 @@ class HTTPServer
      */    
     private $requests = array(/* socket_id => HTTPRequest */);    
     
-    function __construct($options)
+    function __construct($options = null)
     {
-        foreach ($options as $k => $v)
+        if ($options)
         {
-            $this->$k = $v;
+            foreach ($options as $k => $v)
+            {
+                $this->$k = $v;
+            }
         }
     }
     
