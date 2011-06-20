@@ -5,6 +5,8 @@
  * Clients should subclass HTTPServer and override the route_request() method, at least.
  *
  * Copyright (c) 2011, Trust for Conservation Innovation
+ * Released under MIT license; see LICENSE.txt
+ * http://github.com/youngj/httpserver
  */
  
 require_once __DIR__."/httprequest.php";

@@ -1,5 +1,11 @@
 <?php
 
+/*
+ * Copyright (c) 2011, Trust for Conservation Innovation
+ * Released under MIT license; see LICENSE.txt
+ * http://github.com/youngj/httpserver
+ */
+ 
 class HTTPResponse
 {
     public $status;     // HTTP status code

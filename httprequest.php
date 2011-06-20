@@ -1,5 +1,9 @@
 <?php
-
+/*
+ * Copyright (c) 2011, Trust for Conservation Innovation
+ * Released under MIT license; see LICENSE.txt
+ * http://github.com/youngj/httpserver
+ */
 class HTTPRequest
 {
     public $method;             // HTTP method, e.g. "GET" or "POST"
@@ -22,7 +26,7 @@ class HTTPRequest
     const READ_CONTENT = 1;
     const READ_COMPLETE = 2;
         
-    // fields used by HTTPServer to associate other data it tracks along with the request
+    // fields used by HTTPServer to track other data along with the request
     public $socket;
     public $response;
     public $response_buf;
@@ -109,6 +113,9 @@ class HTTPRequest
         }
     }
     
+    /* 
+     * Returns the value of a HTTP header from this request (case-insensitive)
+     */
     function get_header($name)
     {
         return @$this->lc_headers[strtolower($name)];
@@ -120,12 +127,7 @@ class HTTPRequest
     function is_read_complete()
     {
         return $this->cur_state == static::READ_COMPLETE;
-    }
-    
-    function needs_content()
-    {
-        return $this->content_len - strlen($this->content) > 0;
-    }            
+    }    
     
     /*
      * Sets a HTTPResponse object associated with this request, and 
@@ -136,4 +138,13 @@ class HTTPRequest
         $this->response = $response;
         $this->response_buf = $response->render(); 
     }    
+
+    /*
+     * Returns true if more content still needs to be read from the client socket.
+     * Only valid after the headers have been read.
+     */
+    protected function needs_content()
+    {
+        return $this->content_len - strlen($this->content) > 0;
+    }                
 }
