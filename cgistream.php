@@ -12,20 +12,20 @@
 class CGIStream 
 {
     public $context;
-      
-    private $buffer = '';
-    private $buffer_stream;    
-    
-    private $cur_state = 0;
     
     const BUFFERING = 0;
     const BUFFERED = 1;
     const EOF = 2;
     
-    private $proc;
-    private $stream;
-    private $in_stream;
-    private $server;
+    private $cur_state = 0;
+    
+    private $buffer = '';       // buffered output from CGI process, as string
+    private $buffer_stream;     // stream of CGI output after rewriting HTTP headers
+    
+    private $proc;              // handle to CGI process
+    private $stream;            // output stream from CGI process
+    private $server;            // the HTTPServer instance
+    private $response;          // the HTTPResponse instance associated with this stream
     
     /*
      * Used by stream_select to determine when there is data ready on this stream.
@@ -41,12 +41,34 @@ class CGIStream
     {
         $options = stream_context_get_options($this->context);
         
+        $php_cgi = substr($path, 6); // assumes path starts with 'cgi://'
+        
         $cgi_opts = $options['cgi'];
         
-        $this->proc = $cgi_opts['proc'];
-        $this->stream = $cgi_opts['stream'];
-        $this->in_stream = $cgi_opts['in_stream'];
+        $descriptorspec = array(
+           0 => $cgi_opts['stdin'],
+           1 => array('pipe', 'w'),
+           2 => STDERR, 
+        );
+        
+        $proc = proc_open($php_cgi, $descriptorspec, $pipes, 
+            __DIR__, 
+            $cgi_opts['env'],
+            array(
+                'binary_pipes' => true,
+                'bypass_shell' => true
+            )
+        );
+                
+        if (!is_resource($proc))
+        {
+            return false;
+        }                    
+
+        $this->stream = $pipes[1];
+        $this->proc = $proc;
         $this->server = $cgi_opts['server'];
+        $this->response = $cgi_opts['response'];
 
         return true;
     }
@@ -101,6 +123,12 @@ class CGIStream
                     $content = substr($buffer, $end_response_headers + 4);                            
                     $response = $this->server->response($status, $content, $headers);
                 }
+                
+                // set status and headers on the server's HTTPResponse object.
+                // these aren't actually sent to the client,
+                // but they could be referenced by HTTPServer::get_log_line                
+                $this->response->status = $response->status;
+                $this->response->headers = $response->headers;
                     
                 $this->cur_state = static::BUFFERED;                
                 
@@ -135,9 +163,6 @@ class CGIStream
         
         fclose($this->stream); 
         $this->stream = null;
-
-        fclose($this->in_stream);
-        $this->in_stream = null;
         
         if ($this->buffer_stream)
         {
@@ -146,5 +171,8 @@ class CGIStream
         }
         $this->buffer = null;
         $this->server = null;        
+        $this->response = null;
+        
+        $this->context = null;
     }
 }

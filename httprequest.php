@@ -13,7 +13,7 @@ class HTTPRequest
     public $query_string;       // query string, like "a=b&c=d"
     public $headers;            // associative array of HTTP headers
     public $lc_headers;         // associative array of HTTP headers, with header names in lowercase
-    public $content;            // content of POST request, if applicable    
+    public $content_stream;     // stream containing content of HTTP request (e.g. POST data)
     public $remote_addr;        // IP address of client, as string
     public $request_line;       // The HTTP request line exactly as it came from the client
     public $start_time;         // unix timestamp of initial request data, as float with microseconds
@@ -22,6 +22,7 @@ class HTTPRequest
     private $cur_state = 0;
     private $header_buf = '';
     private $content_len = 0;
+    private $content_len_read = 0;
 
     const READ_HEADERS = 0;
     const READ_CONTENT = 1;
@@ -34,6 +35,7 @@ class HTTPRequest
     function __construct($socket)
     {
         $this->socket = $socket;        
+        $this->content_stream = fopen("data://text/plain,", 'r+b');
         
         $remote_name = stream_socket_get_name($socket, true);
         if ($remote_name)
@@ -48,6 +50,12 @@ class HTTPRequest
                 $this->remote_addr = $remote_name;
             }
         }
+    }
+                            
+    function cleanup()
+    {
+        fclose($this->content_stream);
+        $this->content_stream = null;
     }
                             
     /* 
@@ -103,11 +111,14 @@ class HTTPRequest
                 $start_content = $end_headers + 4; // $end_headers is before last \r\n\r\n
                 
                 // add leftover to content
-                $this->content = substr($header_buf, $start_content);
+                $content = substr($header_buf, $start_content);                
+                fwrite($this->content_stream, $content);
+                $this->content_len_read = strlen($content);
                 $header_buf = '';                                
                 break;
             case static::READ_CONTENT:
-                $this->content .= $data;
+                fwrite($this->content_stream, $data);
+                $this->content_len_read += strlen($data);
                 break;
             case static::READ_COMPLETE:
                 break;
@@ -123,6 +134,7 @@ class HTTPRequest
         }
         else
         {
+            fseek($this->content_stream, 0);
             $this->cur_state = static::READ_COMPLETE;
         }
     }
@@ -157,6 +169,6 @@ class HTTPRequest
      */
     protected function needs_content()
     {
-        return $this->content_len - strlen($this->content) > 0;
+        return $this->content_len - $this->content_len_read > 0;
     }                
 }

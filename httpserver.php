@@ -197,7 +197,8 @@ class HTTPServer
                     $this->end_request($request);
                 }
                 else // HTTP Keep-Alive: expect another request on same client socket
-                {                
+                {           
+                    $request->cleanup();                
                     $this->end_response($response);
                     $this->requests[(int)$client] = new HTTPRequest($client);
                 }
@@ -212,13 +213,13 @@ class HTTPServer
         $data = @fread($stream, 30000);
 
         if ($data !== false)
-        {
-            if (strlen($response->buffer))
+        {                
+            if (isset($response->buffer[0]))
             {
                 $response->buffer .= $data;
             }
             else
-            {            
+            {                
                 $response->buffer = $data;
             }
         }
@@ -272,6 +273,7 @@ class HTTPServer
     
     function end_request($request)
     {
+        $request->cleanup();
         @fclose($request->socket);
         unset($this->requests[(int)$request->socket]);           
         $request->socket = null;
@@ -384,49 +386,31 @@ class HTTPServer
                 $cgi_env[$name] = $value;
             }
         }
-
-        $content_stream = fopen("data://text/plain,", 'r+b');
-        if ($content_length)
-        {
-            fwrite($content_stream, $request->content);
-            fseek($content_stream, 0);
-        }
-        
-        $descriptorspec = array(
-           0 => $content_stream,
-           1 => array('pipe', 'w'),
-           2 => STDERR, 
-        );
-        
-        $proc = proc_open($this->php_cgi, $descriptorspec, $pipes, 
-            __DIR__, 
-            array_merge($_ENV, $this->cgi_env, $cgi_env),
-            array(
-                'binary_pipes' => true,
-                'bypass_shell' => true
-            )
-        );                        
-        
-        if (!is_resource($proc))
-        {
-            return $this->text_response(500, "Internal Server Error: {$this->php_cgi} was not found");
-        }                        
-        
-        $response = $this->response();
-        
+                
+        $response = $this->response();                    
+                
         $context = stream_context_create(array(
             'cgi' => array(
-                'proc' => $proc,
-                'in_stream' => $content_stream,
-                'stream' => $pipes[1],
+                'env' => array_merge($_ENV, $this->cgi_env, $cgi_env),
+                'stdin' => $request->content_stream,
                 'server' => $this,
+                'response' => $response,
             )
         ));
         
-        $response->stream = fopen("cgi://wrapper", 'rb', false, $context);
-        $response->prepend_headers = false;
-                
-        return $response;
+        $cgi_stream = fopen("cgi://{$this->php_cgi}", 'rb', false, $context);
+        
+        if ($cgi_stream)
+        {              
+            $response->stream = $cgi_stream;
+            $response->prepend_headers = false;
+            
+            return $response;
+        }
+        else
+        {
+            return $this->text_response(500, "Internal Server Error: {$this->php_cgi} was not found");
+        }
     }         
 
     static function parse_headers($headers_str)
