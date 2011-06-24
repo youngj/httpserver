@@ -11,21 +11,25 @@
  
 require_once __DIR__."/httprequest.php";
 require_once __DIR__."/httpresponse.php";
+require_once __DIR__."/cgistream.php";
 
 class HTTPServer
 {
     /* 
      * The following public properties can be passed as options to the constructor: 
      */    
+    public $addr = '0.0.0.0';               // IP address to listen on
     public $port = 80;                      // TCP port number to listen on    
     public $cgi_env = array();              // associative array of additional environment variables to pass to php-cgi
     public $server_id = 'HTTPServer/0.1';   // identifier string to use in 'Server' header of HTTP response
-    public $php_cgi = 'php-cgi';            // Path to php-cgi, if not in the PATH    
+    public $php_cgi = 'php-cgi';            // Path to php-cgi, if not in the PATH        
     
     /* 
      * Internal map of active client socket resource IDs to HTTPRequest objects
      */    
     private $requests = array(/* socket_id => HTTPRequest */);    
+    
+    private $responses = array(/* stream_id => HTTPResponse */);    
     
     function __construct($options = null)
     {
@@ -45,7 +49,7 @@ class HTTPServer
      */
     function route_request($request)
     {
-        return new HTTPResponse(500, "HTTPServer::route_request not implemented");
+        return $this->response(500, "HTTPServer::route_request not implemented");
     }    
     
     /*
@@ -67,12 +71,12 @@ class HTTPServer
         $time = strftime("%H:%M:%S");
         
         // http://www.w3.org/Daemon/User/Config/Logging.html#common-logfile-format
-        return "{$request->remote_addr} - - [$time] \"{$request->request_line}\" {$response->status} {$response->get_content_length()}\n";
+        return "{$request->remote_addr} - - [$time] \"{$request->request_line}\" {$response->status} {$response->bytes_written}\n";
     }      
     
-    function bind_error()
+    function bind_error($errno, $errstr)
     {
-        error_log("Could not start a web server on port {$this->port}.");    
+        error_log("Could not start a web server on port {$this->port}: {$errstr}");    
     }
     
     function run_forever()
@@ -84,57 +88,77 @@ class HTTPServer
             $_ENV[$key] = getenv($key);
         }
     
+        stream_wrapper_register("cgi", "CGIStream");
+    
         set_time_limit(0);
 
-        $sock = socket_create(AF_INET, SOCK_STREAM, SOL_TCP);
-        socket_set_option($sock, SOL_SOCKET, SO_REUSEADDR, 1);
-            
-        if (@socket_bind($sock, 0, $this->port) == false)
-        {
-            $this->bind_error();
+        $addr_port = "{$this->addr}:{$this->port}";
+        
+        $sock = @stream_socket_server("tcp://$addr_port", $errno, $errstr);
+                          
+        if (!$sock)
+        {            
+            $this->bind_error($errno, $errstr);
             return;
         }
 
-        socket_listen($sock);
-
-        echo "HTTP server listening on 0.0.0.0:{$this->port} (see http://localhost:{$this->port}/)...\n";    
-
-        socket_set_nonblock($sock);        
+        echo "HTTP server listening on $addr_port (see http://localhost:{$this->port}/)...\n";    
+        
+        stream_set_blocking($sock, 0);     
 
         $requests =& $this->requests;
+        $responses =& $this->responses;
     
         while (true)
         {        
             $read = array();
             $write = array();
             foreach ($requests as $id => $request)
-            {
+            {            
+                $mode = '';
+            
                 if (!$request->is_read_complete())
                 {
                     $read[] = $request->socket;
                 }
-                else
+                else 
                 {
-                    $write[] = $request->socket;
-                }
+                    $response = $request->response;
+                    if (strlen($response->buffer))
+                    {
+                        $write[] = $request->socket;
+                    }
+                    
+                    if (!$response->stream_eof())
+                    {
+                        $read[] = $response->stream;
+                    }
+                }                
             }            
-            $read[] = $sock;            
+            $read[] = $sock;                       
             
-            if (socket_select($read, $write, $except = null, null) < 1)
-                continue;
+            if (stream_select($read, $write, $except = null, null) < 1)
+                continue;                
                         
             if (in_array($sock, $read)) // new client connection
             {
-                $client = socket_accept($sock);
+                $client = stream_socket_accept($sock);
                 $requests[(int)$client] = new HTTPRequest($client);
                 
                 $key = array_search($sock, $read);
                 unset($read[$key]);
             }
             
-            foreach ($read as $client)
+            foreach ($read as $stream)
             {
-                $this->read_socket($client);
+                if (isset($responses[(int)$stream]))
+                {
+                    $this->read_response($stream);
+                }
+                else
+                {                
+                    $this->read_socket($stream);
+                }
             }
             
             foreach ($write as $client)
@@ -145,39 +169,56 @@ class HTTPServer
     }
     
     function write_socket($client)
-    {
+    {    
         $request = $this->requests[(int)$client];
-        $response_buf =& $request->response_buf;     
-        $len = @socket_write($client, $response_buf);
-        if ($len === null)
+        $response = $request->response;
+        $response_buf =& $response->buffer;     
+        
+        $len = @fwrite($client, $response_buf);
+        if ($len === false)
         {
             $this->end_request($request);
         }
-        else if ($len < strlen($response_buf))
+        else
         {
+            $response->bytes_written += $len;
             $response_buf = substr($response_buf, $len);
-        }
-        else // done sending HTTP response
-        {
-            echo $this->get_log_line($request);
             
-            if ($request->get_header('Connection') == 'close' || $request->http_version != 'HTTP/1.1')
+            if ($response->eof())
             {
-                $this->end_request($request);
-            }
-            else // HTTP Keep-Alive: expect another request on same client socket
-            {                
-                $this->requests[(int)$client] = new HTTPRequest($client);
+                echo $this->get_log_line($request);
+                
+                if ($request->get_header('Connection') == 'close' || $request->http_version != 'HTTP/1.1')
+                {
+                    $this->end_request($request);
+                }
+                else // HTTP Keep-Alive: expect another request on same client socket
+                {                
+                    $this->end_response($response);
+                    $this->requests[(int)$client] = new HTTPRequest($client);
+                }
             }
         }                
+    }
+    
+    function read_response($stream)
+    {    
+        $response = $this->responses[(int)$stream];
+        
+        $data = @fread($stream, 8192);
+
+        if ($data !== false)
+        {
+            $response->buffer .= $data;
+        }
     }
     
     function read_socket($client)
     {
         $request = $this->requests[(int)$client];
-        $data = @socket_read($client, 8092, PHP_BINARY_READ);
+        $data = @fread($client, 8192);
         
-        if ($data === null || $data == '')
+        if ($data === false || $data == '')
         {
             $this->end_request($request);
         }
@@ -187,36 +228,70 @@ class HTTPServer
             
             if ($request->is_read_complete())
             {
-                $response = $this->get_response($request);
-                $request->set_response($response);
+                $this->read_request_complete($request);
             }    
         }
     }
     
-    function end_request($request)
-    {
-        @socket_close($request->socket);
-        unset($this->requests[(int)$request->socket]);    
-    }        
-    
-    function get_response($request)
+    function read_request_complete($request)
     {
         $uri = $request->uri;
-
+        
         if (!$this->is_allowed_uri($uri))
         {
-            $response = new HTTPResponse(403, "Invalid URI $uri"); 
+            $response = $this->response(403, "Invalid URI $uri"); 
         }
         else
         {        
             $response = $this->route_request($request);        
         }
         
-        $response->headers['Server'] = $this->server_id;
+        if ($response->prepend_headers)
+        {
+            $response->buffer = $response->render();
+        }            
+                
+        if ($response->stream)
+        {
+            $this->responses[(int)$response->stream] = $response;
+        }
         
-        return $response;
+        $request->set_response($response);
     }
-       
+    
+    function end_request($request)
+    {
+        @fclose($request->socket);
+        unset($this->requests[(int)$request->socket]);           
+        $request->socket = null;
+        
+        if ($request->response)
+        {
+            $this->end_response($request->response);
+            $request->response = null;
+        }
+    }        
+    
+    function end_response($response)
+    {
+        if ($response->stream)
+        {        
+            @fclose($response->stream);
+            unset($this->responses[(int)$response->stream]);    
+            $response->stream = null;
+        }
+    }
+    
+    /*
+     * Returns a generic HTTPResponse object for this server.
+     */
+    function response($status = 200, $content = '', $headers = null)
+    {
+        $response = new HTTPResponse($status, $content, $headers);        
+        $response->headers['Server'] = $this->server_id;                
+        return $response;        
+    }
+           
     /*
      * Returns a HTTPResponse object for the static file at $local_path.
      */      
@@ -224,34 +299,38 @@ class HTTPServer
     {   
         if (is_file($local_path))
         {
-            return new HTTPResponse(200, 
-                file_get_contents($local_path),
+            $response = $this->response(200, 
+                fopen($local_path, 'rb'), 
                 array(
                     'Content-Type' => static::get_mime_type($local_path),
-                    'Cache-Control' => "max-age=8640000"
+                    'Cache-Control' => "max-age=8640000",
+                    'Content-Length' => filesize($local_path), 
+                        // hopefully file size doesn't change before we're done writing the file
                 )
             );
+            
+            return $response;
         }
         else if (is_dir($local_path))
         {
-            return new HTTPResponse(403, "Directory listing not allowed");
+            return $this->response(403, "Directory listing not allowed");
         }
         else
         {
-            return new HTTPResponse(404, "File not found");
+            return $this->response(404, "File not found");
         }    
     }        
-            
+    
     /*
      * Executes the PHP script in $script_filename using php-cgi, and returns 
      * a HTTPResponse object. $cgi_env_override can be set to an associative array 
      * to set or override any environment variables in the CGI process (e.g. PATH_INFO).
      */
     function get_php_response($request, $script_filename, $cgi_env_override = null)
-    {        
+    {            
         if (!is_file($script_filename))
         {
-            return new HTTPResponse(404, "File not found");
+            return $this->response(404, "File not found");
         }    
         
         $content_length = $request->get_header('Content-Length');
@@ -316,38 +395,21 @@ class HTTPServer
         
         if (!is_resource($proc))
         {
-            return new HTTPResponse(500, "Internal Server Error: php-cgi was not found");
-        }
-                
-        ob_start();
-        fpassthru($pipes[1]);
-        $response_str = ob_get_clean();
+            return $this->response(500, "Internal Server Error: php-cgi was not found");
+        }                        
         
-        if (!$response_str)
-        {
-            return new HTTPResponse(500, "Internal Server Error: php-cgi did not return a response");
-        }        
-
-        $end_response_headers = strpos($response_str, "\r\n\r\n");
+        $response = $this->response();
         
-        $headers_str = substr($response_str, 0, $end_response_headers);
-
-        $headers = static::parse_headers($headers_str);        
+        $context = stream_context_create(array(
+            'cgi' => array(
+                'proc' => $proc,
+                'stream' => $pipes[1],
+                'server' => $this,
+            )
+        ));
         
-        $response = new HTTPResponse();                        
-        
-        // CGI process sends HTTP status as regular header
-        if (isset($headers['Status']))
-        {
-            $response->status = (int) $headers['Status'];
-            unset($headers['Status']);
-        }
-        $response->headers = $headers;                        
-        $response->content = substr($response_str, $end_response_headers + 4);
-        
-        proc_close($proc);
-        
-        fclose($content_stream);
+        $response->stream = fopen("cgi://wrapper", 'rb', false, $context);
+        $response->prepend_headers = false;
                 
         return $response;
     }         

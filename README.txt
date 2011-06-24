@@ -33,10 +33,9 @@ Caveats:
     * Should NOT be used as a production web server open to untrusted traffic.
     * Not very robust (e.g. no connection limit or timeouts)
     * May have security flaws
-    * Requests are served by a single process, since PHP on Windows cannot
-      share sockets across multiple processes. A long-running PHP script will
-      delay all other requests until it completes or times out. (However, 
-      multiple connections can send and receive data at the same time.)
+    * On Windows, PHP requests will block the server until the php-cgi process 
+      completes (PHP on Windows cannot share sockets across multiple processes,
+      and does not have non-blocking pipes).
     * PHP scripts that depend on server-specific extensions (e.g. functions like 
       apache_*, iis_*, nsapi_*) will not work.
     

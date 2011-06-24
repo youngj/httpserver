@@ -29,15 +29,23 @@ class HTTPRequest
     // fields used by HTTPServer to track other data along with the request
     public $socket;
     public $response;
-    public $response_buf;
     
     function __construct($socket)
     {
-        $this->socket = $socket;
+        $this->socket = $socket;        
         
-        if (!socket_getpeername($socket, $this->remote_addr))
-        {
-            $this->remote_addr = '127.0.0.1';
+        $remote_name = stream_socket_get_name($socket, true);
+        if ($remote_name)
+        {        
+            $port_pos = strrpos($remote_name, ":");
+            if ($port_pos)
+            {
+                $this->remote_addr = substr($remote_name, 0, $port_pos);
+            }
+            else
+            {
+                $this->remote_addr = $remote_name;
+            }
         }
     }
                             
@@ -130,13 +138,11 @@ class HTTPRequest
     }    
     
     /*
-     * Sets a HTTPResponse object associated with this request, and 
-     * prepares a buffer containing the remaining content. 
+     * Sets a HTTPResponse object associated with this request
      */ 
     function set_response($response)
     {
         $this->response = $response;
-        $this->response_buf = $response->render(); 
     }    
 
     /*

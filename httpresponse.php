@@ -8,45 +8,77 @@
  
 class HTTPResponse
 {
-    public $status;     // HTTP status code
-    public $content;    // response body        
-    public $headers;    // associative array of HTTP headers    
+    public $status;                 // HTTP status code    
+    public $headers;                // associative array of HTTP headers 
     
+    public $content = '';           // response body, as string (optional)    
+    public $stream = null;          // response body (or headers+body if prepend_headers is false) as stream
+    
+    public $prepend_headers = true; // true if the HTTP status/headers should be added to the response
+                                    // false if the HTTP status/headers are sent in $stream
+    
+    public $buffer = '';            // buffer of HTTP response waiting to be written to client socket
+    public $bytes_written = 0;      // count of bytes written to client socket
+
     function __construct($status = 200, $content = '', $headers = null)
     {
         $this->status = $status;
-        $this->content = $content;
+        
+        if (is_resource($content))
+        {
+            $this->stream = $content;
+        }
+        else        
+        {
+            $this->content = $content;
+        }
         $this->headers = $headers ?: array();
     }        
-
+   
+    function eof()
+    {
+        return !strlen($this->buffer) && $this->stream_eof();
+    }
+    
+    function stream_eof()
+    {
+        return !$this->stream || feof($this->stream);
+    }    
+        
+    static function render_status($status)
+    {    
+        $status_msg = static::$status_messages[$status];
+        return "HTTP/1.1 $status $status_msg\r\n";
+    }
+    
+    static function render_headers($headers)
+    {
+        ob_start();        
+        foreach ($headers as $name => $value)
+        {
+            echo "$name: $value\r\n";
+        }
+        echo "\r\n";        
+        return ob_get_clean();
+    }
+            
     function render()
     {
-        $headers = $this->headers;
-        $status = $this->status;
-        $content = $this->content;
+        $headers =& $this->headers;
 
         if (!isset($headers['Content-Length']))
         {
             $headers['Content-Length'] = $this->get_content_length();
         }        
-            
-        $status_msg = static::$status_messages[$status];
-
-        ob_start();
         
-        echo "HTTP/1.1 $status $status_msg\r\n";
-        foreach ($headers as $name => $value)
-        {
-            echo "$name: $value\r\n";
-        }
-        echo "\r\n";
-        echo $content;
-        
-        return ob_get_clean();
+        return  static::render_status($this->status).
+                static::render_headers($headers).
+                $this->content;
     }
     
     function get_content_length()
     {
+        // only valid if content is supplied as a string
         return strlen($this->content);
     }    
     
