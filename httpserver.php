@@ -119,8 +119,6 @@ class HTTPServer
             $write = array();
             foreach ($requests as $id => $request)
             {            
-                $mode = '';
-            
                 if (!$request->is_read_complete())
                 {
                     $read[] = $request->socket;
@@ -211,18 +209,25 @@ class HTTPServer
     {    
         $response = $this->responses[(int)$stream];
         
-        $data = @fread($stream, 8192);
+        $data = @fread($stream, 30000);
 
         if ($data !== false)
         {
-            $response->buffer .= $data;
+            if (strlen($response->buffer))
+            {
+                $response->buffer .= $data;
+            }
+            else
+            {            
+                $response->buffer = $data;
+            }
         }
     }
     
     function read_socket($client)
     {
         $request = $this->requests[(int)$client];
-        $data = @fread($client, 8192);
+        $data = @fread($client, 30000);
         
         if ($data === false || $data == '')
         {

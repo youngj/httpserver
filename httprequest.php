@@ -16,6 +16,7 @@ class HTTPRequest
     public $content;            // content of POST request, if applicable    
     public $remote_addr;        // IP address of client, as string
     public $request_line;       // The HTTP request line exactly as it came from the client
+    public $start_time;         // unix timestamp of initial request data, as float with microseconds
                
     // internal fields to track the state of reading the HTTP request
     private $cur_state = 0;
@@ -57,6 +58,11 @@ class HTTPRequest
         switch ($this->cur_state)
         {
             case static::READ_HEADERS:
+                if (!$this->start_time)
+                {
+                    $this->start_time = microtime(true);
+                }
+            
                 $header_buf =& $this->header_buf;
             
                 $header_buf .= $data;
