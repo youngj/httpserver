@@ -81,27 +81,28 @@ class CGIStream
                 $end_response_headers = strpos($buffer, "\r\n\r\n");                
                 if ($end_response_headers === false)
                 {
-                    $response = new HTTPResponse(502, "Invalid Response from CGI process");
-                    return $response->render();
+                    $response = $this->server->text_response(502, "Invalid Response from CGI process");
                 }
-                
-                $headers_str = substr($buffer, 0, $end_response_headers);        
-                $headers = HTTPServer::parse_headers($headers_str);        
-                
-                if (isset($headers['Status']))
-                {
-                    $status = (int) $headers['Status'];
-                    unset($headers['Status']);
-                }                
                 else
-                {
-                    $status = 200;
-                }                
-                
-                $content = substr($buffer, $end_response_headers + 4);        
-                $this->cur_state = static::BUFFERED;
-                
-                $response = $this->server->response($status, $content, $headers);
+                {                
+                    $headers_str = substr($buffer, 0, $end_response_headers);        
+                    $headers = HTTPServer::parse_headers($headers_str);        
+                    
+                    if (isset($headers['Status']))
+                    {
+                        $status = (int) $headers['Status'];
+                        unset($headers['Status']);
+                    }                
+                    else
+                    {
+                        $status = 200;
+                    }                
+                    
+                    $content = substr($buffer, $end_response_headers + 4);                            
+                    $response = $this->server->response($status, $content, $headers);
+                }
+                    
+                $this->cur_state = static::BUFFERED;                
                 
                 $this->buffer_stream = fopen('data://text/plain,', 'r+b');
                 

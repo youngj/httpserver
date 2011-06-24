@@ -53,7 +53,7 @@ class HTTPServer
      */
     function route_request($request)
     {
-        return $this->response(500, "HTTPServer::route_request not implemented");
+        return $this->text_response(500, "HTTPServer::route_request not implemented");
     }    
     
     /*
@@ -243,7 +243,7 @@ class HTTPServer
         
         if (!$this->is_allowed_uri($uri))
         {
-            $response = $this->response(403, "Invalid URI $uri"); 
+            $response = $this->text_response(403, "Invalid URI $uri"); 
         }
         else
         {        
@@ -295,7 +295,14 @@ class HTTPServer
         $response->headers['Server'] = $this->server_id;                
         return $response;        
     }
-           
+      
+    function text_response($status, $content)
+    {
+        $response = $this->response($status, $content);
+        $response->headers['Content-Type'] = 'text/plain';
+        return $response;
+    }
+      
     /*
      * Returns a HTTPResponse object for the static file at $local_path.
      */      
@@ -317,11 +324,11 @@ class HTTPServer
         }
         else if (is_dir($local_path))
         {
-            return $this->response(403, "Directory listing not allowed");
+            return $this->text_response(403, "Directory listing not allowed");
         }
         else
         {
-            return $this->response(404, "File not found");
+            return $this->text_response(404, "File not found");
         }    
     }        
     
@@ -334,7 +341,7 @@ class HTTPServer
     {            
         if (!is_file($script_filename))
         {
-            return $this->response(404, "File not found");
+            return $this->text_response(404, "File not found");
         }    
         
         $content_length = $request->get_header('Content-Length');
@@ -395,7 +402,7 @@ class HTTPServer
         
         if (!is_resource($proc))
         {
-            return $this->response(500, "Internal Server Error: php-cgi was not found");
+            return $this->text_response(500, "Internal Server Error: {$this->php_cgi} was not found");
         }                        
         
         $response = $this->response();
