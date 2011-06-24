@@ -3,7 +3,7 @@
 /*
  * CGIStream is a PHP stream wrapper (http://www.php.net/manual/en/class.streamwrapper.php)
  * that wraps the stdout pipe from a CGI process. It buffers the output until the CGI process is 
- * complete, and then rewrites some HTTP headers (Content-Type, Status, Server) and sets the HTTP status code
+ * complete, and then rewrites some HTTP headers (Content-Length, Status, Server) and sets the HTTP status code
  * before returning the output stream from fread().
  *
  * This allows the server to be notified via stream_select() when the CGI output is ready, rather than waiting
