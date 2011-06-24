@@ -18,7 +18,6 @@ Motivation:
 Dependencies:
     * PHP 5.3 or higher
     * php-cgi binary 
-    * PHP 'sockets' extension
 
 Features:
     * Works on Windows as well as POSIX systems.
@@ -28,6 +27,7 @@ Features:
       just by creating a subclass of HTTPServer.
     * Nearly all PHP scripts should work without modification. (Each PHP 
       request is run in an isolated environment using PHP-CGI.)
+    * Does not require any PHP extensions.
     
 Caveats:
     * Should NOT be used as a production web server open to untrusted traffic.
