@@ -29,6 +29,10 @@ class HTTPServer
      */    
     private $requests = array(/* socket_id => HTTPRequest */);    
     
+    /* 
+     * Internal map of stream resource IDs to HTTPResponse objects 
+     * (only includes HTTPResponse objects with an associated stream)
+     */        
     private $responses = array(/* stream_id => HTTPResponse */);    
     
     function __construct($options = null)
@@ -367,15 +371,11 @@ class HTTPServer
             }
         }
 
+        $content_stream = fopen("data://text/plain,", 'r+b');
         if ($content_length)
         {
-            $content_stream = tmpfile();
             fwrite($content_stream, $request->content);
             fseek($content_stream, 0);
-        }
-        else
-        {        
-            $content_stream = fopen("data://text/plain,", 'rb');
         }
         
         $descriptorspec = array(
@@ -403,6 +403,7 @@ class HTTPServer
         $context = stream_context_create(array(
             'cgi' => array(
                 'proc' => $proc,
+                'in_stream' => $content_stream,
                 'stream' => $pipes[1],
                 'server' => $this,
             )

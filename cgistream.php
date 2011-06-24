@@ -23,7 +23,8 @@ class CGIStream
     const EOF = 2;
     
     private $proc;
-    private $stream; 
+    private $stream;
+    private $in_stream;
     private $server;
     
     /*
@@ -40,9 +41,12 @@ class CGIStream
     {
         $options = stream_context_get_options($this->context);
         
-        $this->proc = $options['cgi']['proc'];
-        $this->stream = $options['cgi']['stream'];
-        $this->server = $options['cgi']['server'];
+        $cgi_opts = $options['cgi'];
+        
+        $this->proc = $cgi_opts['proc'];
+        $this->stream = $cgi_opts['stream'];
+        $this->in_stream = $cgi_opts['in_stream'];
+        $this->server = $cgi_opts['server'];
 
         return true;
     }
@@ -126,14 +130,20 @@ class CGIStream
     function stream_close()
     {
         proc_close($this->proc);        
+        $this->proc = null;
+        
         fclose($this->stream); 
+        $this->stream = null;
 
+        fclose($this->in_stream);
+        $this->in_stream = null;
+        
         if ($this->buffer_stream)
         {
             fclose($this->buffer_stream);
+            $this->buffer_stream = null;
         }
-        $this->stream = null;
-        $this->proc = null;
+        $this->buffer = null;
         $this->server = null;        
     }
 }
