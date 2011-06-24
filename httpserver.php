@@ -128,12 +128,14 @@ class HTTPServer
                 else 
                 {
                     $response = $request->response;
-                    if (strlen($response->buffer))
+                    
+                    $buffer_len = strlen($response->buffer);
+                    if ($buffer_len)
                     {
                         $write[] = $request->socket;
                     }
                     
-                    if (!$response->stream_eof())
+                    if ($buffer_len < 20000 && !$response->stream_eof())
                     {
                         $read[] = $response->stream;
                     }
