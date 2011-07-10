@@ -298,9 +298,9 @@ class HTTPServer
     /*
      * Returns a generic HTTPResponse object for this server.
      */
-    function response($status = 200, $content = '', $headers = null)
+    function response($status = 200, $content = '', $headers = null, $status_msg = null)
     {
-        $response = new HTTPResponse($status, $content, $headers);        
+        $response = new HTTPResponse($status, $content, $headers, $status_msg);
         $response->headers['Server'] = $this->server_id;                
         return $response;        
     }
