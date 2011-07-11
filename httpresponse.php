@@ -9,7 +9,7 @@
 class HTTPResponse
 {
     public $status;                 // HTTP status code
-    public $status_msg;         // HTTP status message
+    public $status_msg;             // HTTP status message
     public $headers;                // associative array of HTTP headers 
     
     public $content = '';           // response body, as string (optional)    
@@ -47,12 +47,13 @@ class HTTPResponse
         return !$this->stream || feof($this->stream);
     }    
         
-    static function render_status($status, $status_msg)
+    static function render_status($status, $status_msg = null)
     {
         // Per RFC2616 6.1.1 we pass on a status message from the provider if
         // provided, otherwise we use the standard message for that code.
-        if (empty($status_msg)) {
-          $status_msg = static::$status_messages[$status];
+        if (empty($status_msg)) 
+        {
+            $status_msg = static::$status_messages[$status];
         }
         return "HTTP/1.1 $status $status_msg\r\n";
     }

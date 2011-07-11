@@ -112,9 +112,9 @@ class CGIStream
                     
                     if (isset($headers['Status']))
                     {
-                        $separator = strpos($headers['Status'], ' ');
-                        $status = (int) substr($headers['Status'], 0, $separator);
-                        $status_msg = trim(substr($headers['Status'], $separator));
+                        $status_arr = explode(' ', $headers['Status'], 2);                    
+                        $status = (int) $status_arr[0];
+                        $status_msg = trim($status_arr[1]);
                         unset($headers['Status']);
                     }                
                     else
