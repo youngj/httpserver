@@ -61,7 +61,8 @@ class HTTPServer
      */
     function listening()
     {
-        echo "HTTP server listening on $addr_port (see http://localhost:{$this->port}/)...\n";    
+        $port = $this->port;
+        echo "HTTP server listening on {$this->addr}:$port (see http://localhost:$port/)...\n";    
     }    
     
     /*
@@ -195,8 +196,7 @@ class HTTPServer
         $response = $request->response;
         $response_buf =& $response->buffer;     
         
-        $len = @fwrite($client, $response_buf);
-        $this->request_done($request);
+        $len = @fwrite($client, $response_buf);        
         if ($len === false)
         {
             $this->end_request($request);
@@ -208,6 +208,8 @@ class HTTPServer
             
             if ($response->eof())
             {                
+                $this->request_done($request);
+            
                 if ($request->get_header('Connection') == 'close' || $request->http_version != 'HTTP/1.1')
                 {
                     $this->end_request($request);
