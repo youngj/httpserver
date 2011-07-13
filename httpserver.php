@@ -61,6 +61,7 @@ class HTTPServer
      */
     function listening()
     {
+        echo "HTTP server listening on $addr_port (see http://localhost:{$this->port}/)...\n";    
     }    
     
     /*
@@ -83,6 +84,14 @@ class HTTPServer
         
         // http://www.w3.org/Daemon/User/Config/Logging.html#common-logfile-format
         return "{$request->remote_addr} - - [$time] \"{$request->request_line}\" {$response->status} {$response->bytes_written}\n";
+    }      
+
+    /*
+     * Subclasses could override for logging or other other post-request events
+     */    
+    function request_done($request)
+    {
+	    echo $this->get_log_line($request);
     }      
     
     function bind_error($errno, $errstr)
@@ -112,8 +121,6 @@ class HTTPServer
             $this->bind_error($errno, $errstr);
             return;
         }
-
-//        echo "HTTP server listening on $addr_port (see http://localhost:{$this->port}/)...\n";    
         
         stream_set_blocking($sock, 0);     
 
@@ -189,6 +196,7 @@ class HTTPServer
         $response_buf =& $response->buffer;     
         
         $len = @fwrite($client, $response_buf);
+        $this->request_done($request);
         if ($len === false)
         {
             $this->end_request($request);
@@ -199,9 +207,7 @@ class HTTPServer
             $response_buf = substr($response_buf, $len);
             
             if ($response->eof())
-            {
-//                echo $this->get_log_line($request);
-                
+            {                
                 if ($request->get_header('Connection') == 'close' || $request->http_version != 'HTTP/1.1')
                 {
                     $this->end_request($request);
@@ -213,7 +219,7 @@ class HTTPServer
                     $this->requests[(int)$client] = new HTTPRequest($client);
                 }
             }
-        }                
+        }
     }
     
     function read_response($stream)
