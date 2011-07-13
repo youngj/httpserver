@@ -55,6 +55,13 @@ class HTTPServer
     {
         return $this->text_response(500, "HTTPServer::route_request not implemented");
     }    
+
+    /*  
+     * Subclasses can override to get started event
+     */
+    function listening()
+    {
+    }    
     
     /*
      * Subclasses could override to disallow other characters in path names
@@ -106,13 +113,16 @@ class HTTPServer
             return;
         }
 
-        echo "HTTP server listening on $addr_port (see http://localhost:{$this->port}/)...\n";    
+//        echo "HTTP server listening on $addr_port (see http://localhost:{$this->port}/)...\n";    
         
         stream_set_blocking($sock, 0);     
 
         $requests =& $this->requests;
         $responses =& $this->responses;
-    
+
+    	// send startup event
+		$this->listening();
+
         while (true)
         {        
             $read = array();
@@ -190,7 +200,7 @@ class HTTPServer
             
             if ($response->eof())
             {
-                echo $this->get_log_line($request);
+//                echo $this->get_log_line($request);
                 
                 if ($request->get_header('Connection') == 'close' || $request->http_version != 'HTTP/1.1')
                 {
