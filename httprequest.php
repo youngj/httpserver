@@ -23,7 +23,17 @@ class HTTPRequest
     private $header_buf = '';
     private $content_len = 0;
     private $content_len_read = 0;
+    
+    private $is_chunked = false;
+    private $chunk_state = 0;
+    private $chunk_len_remaining = 0;
+    private $chunk_trailer_remaining = 0;
+    private $chunk_header_buf = '';
 
+    const READ_CHUNK_HEADER = 0;
+    const READ_CHUNK_DATA = 1;
+    const READ_CHUNK_TRAILER = 2;
+    
     const READ_HEADERS = 0;
     const READ_CONTENT = 1;
     const READ_COMPLETE = 2;
@@ -106,36 +116,133 @@ class HTTPRequest
                     $this->lc_headers[strtolower($k)] = $v;
                 }                
 
-                $this->content_len = (int)@$this->lc_headers['content-length'];
+                if (isset($this->lc_headers['transfer-encoding']))
+                {
+                    $this->is_chunked = $this->lc_headers['transfer-encoding'] == 'chunked';
+                    
+                    unset($this->lc_headers['transfer-encoding']);
+                    unset($this->headers['Transfer-Encoding']);
+                    
+                    $this->content_len = 0;
+                }                
+                else
+                {                
+                    $this->content_len = (int)@$this->lc_headers['content-length'];
+                }
                 
                 $start_content = $end_headers + 4; // $end_headers is before last \r\n\r\n
                 
-                // add leftover to content
-                $content = substr($header_buf, $start_content);                
-                fwrite($this->content_stream, $content);
-                $this->content_len_read = strlen($content);
-                $header_buf = '';                                
-                break;
+                $data = substr($header_buf, $start_content);
+                $header_buf = '';
+                                
+                $this->cur_state = static::READ_CONTENT;
+                                
+                // fallthrough to READ_CONTENT with leftover data
             case static::READ_CONTENT:
-                fwrite($this->content_stream, $data);
-                $this->content_len_read += strlen($data);
+                
+                if ($this->is_chunked)
+                {
+                    $this->read_chunked_data($data);
+                }
+                else
+                {
+                    fwrite($this->content_stream, $data);
+                    $this->content_len_read += strlen($data);
+                    
+                    if ($this->content_len - $this->content_len_read <= 0)
+                    {
+                        $this->cur_state = static::READ_COMPLETE;
+                    }
+                }                
                 break;
             case static::READ_COMPLETE:
                 break;
         }    
         
-        if (!$this->headers)
-        {
-            $this->cur_state = static::READ_HEADERS;
-        }
-        else if ($this->needs_content())
-        {
-            $this->cur_state = static::READ_CONTENT;
-        }
-        else
+        if ($this->cur_state == static::READ_COMPLETE)
         {
             fseek($this->content_stream, 0);
-            $this->cur_state = static::READ_COMPLETE;
+        }
+    }
+    
+    function read_chunked_data($data)
+    {
+        $content_stream =& $this->content_stream;
+        $chunk_header_buf =& $this->chunk_header_buf;
+        $chunk_len_remaining =& $this->chunk_len_remaining;
+        $chunk_trailer_remaining =& $this->chunk_trailer_remaining;
+        $chunk_state =& $this->chunk_state;
+    
+        while (isset($data[0])) // keep processing chunks until we run out of data
+        {            
+            switch ($chunk_state)
+            {           
+                case static::READ_CHUNK_HEADER:
+                    $chunk_header_buf .= $data;
+                    $data = "";
+                
+                    $end_chunk_header = strpos($chunk_header_buf, "\r\n");
+                    if ($end_chunk_header === false) // still need to read more chunk header
+                    {
+                        break; 
+                    }
+                    
+                    // done with chunk header
+                    $chunk_header = substr($chunk_header_buf, 0, $end_chunk_header);
+                    
+                    list($chunk_len_hex) = explode(";", $chunk_header, 2);
+                                        
+                    $chunk_len_remaining = intval($chunk_len_hex, 16);                    
+                    
+                    $chunk_state = static::READ_CHUNK_DATA;
+                    
+                    $data = substr($chunk_header_buf, $end_chunk_header + 2);
+                    $chunk_header_buf = '';
+                    
+                    if ($chunk_len_remaining == 0)
+                    {
+                        $this->cur_state = static::READ_COMPLETE;
+                        $this->headers['Content-Length'] = $this->lc_headers['content-length'] = $this->content_len;
+                        
+                        // todo: this is where we should process trailers...
+                        return;
+                    }                    
+                    
+                    // fallthrough to READ_CHUNK_DATA with leftover data
+                case static::READ_CHUNK_DATA:
+                    if (strlen($data) > $chunk_len_remaining)
+                    {
+                        $chunk_data = substr($data, 0, $chunk_len_remaining);
+                    }
+                    else
+                    {
+                        $chunk_data = $data;
+                    }
+                    
+                    $this->content_len += strlen($chunk_data);
+                    fwrite($content_stream, $chunk_data);
+                    $data = substr($data, $chunk_len_remaining);
+                    $chunk_len_remaining -= strlen($chunk_data);
+                    
+                    if ($chunk_len_remaining == 0)
+                    {          
+                        $chunk_trailer_remaining = 2;
+                        $chunk_state = static::READ_CHUNK_TRAILER;
+                    }
+                    break;
+                case static::READ_CHUNK_TRAILER: // each chunk ends in \r\n, which we ignore
+                    $len_to_read = min(strlen($data), $chunk_trailer_remaining);
+                
+                    $data = substr($data, $len_to_read);
+                    $chunk_trailer_remaining -= $len_to_read;                        
+                    
+                    if ($chunk_trailer_remaining == 0)
+                    {
+                        $chunk_state = static::READ_CHUNK_HEADER;
+                    }
+                    
+                    break;
+            }
         }
     }
     
@@ -161,14 +268,5 @@ class HTTPRequest
     function set_response($response)
     {
         $this->response = $response;
-    }    
-
-    /*
-     * Returns true if more content still needs to be read from the client socket.
-     * Only valid after the headers have been read.
-     */
-    protected function needs_content()
-    {
-        return $this->content_len - $this->content_len_read > 0;
-    }                
+    }             
 }
