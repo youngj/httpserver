@@ -112,22 +112,26 @@ class CGIStream
                     
                     if (isset($headers['Status']))
                     {
-                        $status = (int) $headers['Status'];
+                        $status_arr = explode(' ', $headers['Status'], 2);                    
+                        $status = (int) $status_arr[0];
+                        $status_msg = trim($status_arr[1]);
                         unset($headers['Status']);
                     }                
                     else
                     {
                         $status = 200;
-                    }                
-                    
+                        $status_msg = null;
+                    }
+
                     $content = substr($buffer, $end_response_headers + 4);                            
-                    $response = $this->server->response($status, $content, $headers);
+                    $response = $this->server->response($status, $content, $headers, $status_msg);
                 }
                 
                 // set status and headers on the server's HTTPResponse object.
                 // these aren't actually sent to the client,
                 // but they could be referenced by HTTPServer::get_log_line                
                 $this->response->status = $response->status;
+                $this->response->status_msg = $response->status_msg;
                 $this->response->headers = $response->headers;
                     
                 $this->cur_state = static::BUFFERED;                

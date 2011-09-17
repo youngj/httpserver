@@ -8,7 +8,8 @@
  
 class HTTPResponse
 {
-    public $status;                 // HTTP status code    
+    public $status;                 // HTTP status code
+    public $status_msg;             // HTTP status message
     public $headers;                // associative array of HTTP headers 
     
     public $content = '';           // response body, as string (optional)    
@@ -20,10 +21,11 @@ class HTTPResponse
     public $buffer = '';            // buffer of HTTP response waiting to be written to client socket
     public $bytes_written = 0;      // count of bytes written to client socket
 
-    function __construct($status = 200, $content = '', $headers = null)
+    function __construct($status = 200, $content = '', $headers = null, $status_msg = null)
     {
         $this->status = $status;
-        
+        $this->status_msg = $status_msg;
+
         if (is_resource($content))
         {
             $this->stream = $content;
@@ -45,9 +47,14 @@ class HTTPResponse
         return !$this->stream || feof($this->stream);
     }    
         
-    static function render_status($status)
-    {    
-        $status_msg = static::$status_messages[$status];
+    static function render_status($status, $status_msg = null)
+    {
+        // Per RFC2616 6.1.1 we pass on a status message from the provider if
+        // provided, otherwise we use the standard message for that code.
+        if (empty($status_msg)) 
+        {
+            $status_msg = static::$status_messages[$status];
+        }
         return "HTTP/1.1 $status $status_msg\r\n";
     }
     
@@ -71,7 +78,7 @@ class HTTPResponse
             $headers['Content-Length'] = $this->get_content_length();
         }        
         
-        return  static::render_status($this->status).
+        return  static::render_status($this->status, $this->status_msg).
                 static::render_headers($headers).
                 $this->content;
     }

@@ -55,6 +55,15 @@ class HTTPServer
     {
         return $this->text_response(500, "HTTPServer::route_request not implemented");
     }    
+
+    /*  
+     * Subclasses can override to get started event
+     */
+    function listening()
+    {
+        $port = $this->port;
+        echo "HTTP server listening on {$this->addr}:$port (see http://localhost:$port/)...\n";    
+    }    
     
     /*
      * Subclasses could override to disallow other characters in path names
@@ -76,6 +85,14 @@ class HTTPServer
         
         // http://www.w3.org/Daemon/User/Config/Logging.html#common-logfile-format
         return "{$request->remote_addr} - - [$time] \"{$request->request_line}\" {$response->status} {$response->bytes_written}\n";
+    }      
+
+    /*
+     * Subclasses could override for logging or other other post-request events
+     */    
+    function request_done($request)
+    {
+	    echo $this->get_log_line($request);
     }      
     
     function bind_error($errno, $errstr)
@@ -105,14 +122,15 @@ class HTTPServer
             $this->bind_error($errno, $errstr);
             return;
         }
-
-        echo "HTTP server listening on $addr_port (see http://localhost:{$this->port}/)...\n";    
         
         stream_set_blocking($sock, 0);     
 
         $requests =& $this->requests;
         $responses =& $this->responses;
-    
+
+    	// send startup event
+		$this->listening();
+
         while (true)
         {        
             $read = array();
@@ -178,7 +196,7 @@ class HTTPServer
         $response = $request->response;
         $response_buf =& $response->buffer;     
         
-        $len = @fwrite($client, $response_buf);
+        $len = @fwrite($client, $response_buf);        
         if ($len === false)
         {
             $this->end_request($request);
@@ -189,9 +207,9 @@ class HTTPServer
             $response_buf = substr($response_buf, $len);
             
             if ($response->eof())
-            {
-                echo $this->get_log_line($request);
-                
+            {                
+                $this->request_done($request);
+            
                 if ($request->get_header('Connection') == 'close' || $request->http_version != 'HTTP/1.1')
                 {
                     $this->end_request($request);
@@ -203,7 +221,7 @@ class HTTPServer
                     $this->requests[(int)$client] = new HTTPRequest($client);
                 }
             }
-        }                
+        }
     }
     
     function read_response($stream)
@@ -298,9 +316,9 @@ class HTTPServer
     /*
      * Returns a generic HTTPResponse object for this server.
      */
-    function response($status = 200, $content = '', $headers = null)
+    function response($status = 200, $content = '', $headers = null, $status_msg = null)
     {
-        $response = new HTTPResponse($status, $content, $headers);        
+        $response = new HTTPResponse($status, $content, $headers, $status_msg);
         $response->headers['Server'] = $this->server_id;                
         return $response;        
     }
