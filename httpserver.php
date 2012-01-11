@@ -157,9 +157,10 @@ class HTTPServer
                     }
                 }                
             }            
-            $read[] = $sock;                       
+            $read[] = $sock;       
+            $except = null;
             
-            if (stream_select($read, $write, $except = null, null) < 1)
+            if (stream_select($read, $write, $except, null) < 1)
                 continue;                
                         
             if (in_array($sock, $read)) // new client connection
@@ -196,7 +197,8 @@ class HTTPServer
         $response = $request->response;
         $response_buf =& $response->buffer;     
         
-        $len = @fwrite($client, $response_buf);        
+        $len = @fwrite($client, $response_buf);   
+        
         if ($len === false)
         {
             $this->end_request($request);
