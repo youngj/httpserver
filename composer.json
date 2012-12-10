@@ -1,0 +1,27 @@
+{
+    "name": "youngj/httpserver",
+    "description": "A simple HTTP server, written in PHP, that serves PHP scripts and static files.",
+    "type": "library",
+    "homepage": "https://github.com/youngj/httpserver",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Jesse Young",
+            "homepage": "https://github.com/youngj"
+        }
+    ],
+    "require": {
+        "php": ">=5.3"
+    },
+    "suggest": {
+        "php-cgi": "HTTPServer requires the php-cgi binary."
+    },
+    "autoload": {
+        "classmap": [
+            "cgistream.php",
+            "httprequest.php",
+            "httpresponse.php",
+            "httpserver.php"
+        ]
+    }
+}
