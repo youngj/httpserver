@@ -179,7 +179,7 @@ class HTTPServer
                     $this->read_response($stream);
                 }
                 else
-                {                
+                {
                     $this->read_socket($stream);
                 }
             }
@@ -198,7 +198,7 @@ class HTTPServer
         $response_buf =& $response->buffer;     
         
         $len = @fwrite($client, $response_buf);   
-        
+                
         if ($len === false)
         {
             $this->end_request($request);
@@ -212,7 +212,7 @@ class HTTPServer
             {                
                 $this->request_done($request);
             
-                if ($request->get_header('Connection') == 'close' || $request->http_version != 'HTTP/1.1')
+                if ($request->get_header('Connection') === 'close' || $request->http_version !== 'HTTP/1.1')
                 {
                     $this->end_request($request);
                 }
@@ -249,13 +249,13 @@ class HTTPServer
     {
         $request = $this->requests[(int)$client];
         $data = @fread($client, 30000);
-        
+                
         if ($data === false || $data == '')
         {
             $this->end_request($request);
         }
         else
-        {
+        {        
             $request->add_data($data);
             
             if ($request->is_read_complete())
@@ -338,17 +338,65 @@ class HTTPServer
     function get_static_response($request, $local_path)
     {   
         if (is_file($local_path))
-        {
-            $response = $this->response(200, 
-                fopen($local_path, 'rb'), 
-                array(
+        {        
+            $headers = array(
                     'Content-Type' => static::get_mime_type($local_path),
                     'Cache-Control' => "max-age=8640000",
-                    'Content-Length' => filesize($local_path), 
-                        // hopefully file size doesn't change before we're done writing the file
-                )
-            );
-            
+                    'Accept-Ranges' => 'bytes',
+            );        
+        
+            $file_size = filesize($local_path);
+        
+            if ($request->method === 'HEAD')
+            {
+                $headers['Content-Length'] = $file_size;
+                return $this->response(200, '', $headers);
+            }
+            else if ($request->method == 'GET')
+            {
+                $range = $request->get_header('range');        
+                                
+                $file = fopen($local_path, 'rb');
+
+                if ($range && preg_match('#^bytes=(\d+)\-(\d*)$#', $range, $match))
+                {        
+                    $start = (int)$match[1];
+                    $end = (int)$match[2] ?: ($file_size - 1);
+                                   
+                    if ($end >= $file_size || $end < $start || $start < 0 || $start >= $file_size)
+                    {
+                        $response = $this->text_response(416, 'Invalid request range');
+                    }
+                    
+                    $len = $end - $start + 1;
+                    
+                    $headers['Content-Length'] = $len;
+                    $headers['Content-Range'] = "bytes $start-$end/$file_size";
+                    
+                    fseek($file, $start);
+                    
+                    if ($end == $file_size - 1)
+                    {
+                        return $this->response(206, $file, $headers);
+                    }
+                    else
+                    {
+                        $chunk = fread($file, $len);
+                        return $this->response(206, $chunk, $headers);
+                    }
+                }
+                else
+                {
+                    $headers['Content-Length'] = $file_size;
+                    // hopefully file size doesn't change before we're done writing the file            
+                    $response = $this->response(200, $file, $headers);
+                }    
+            }
+            else
+            {
+                return $this->text_response(405, "Invalid HTTP method {$request->method}");
+            }
+        
             return $response;
         }
         else if (is_dir($local_path))
@@ -472,7 +520,10 @@ class HTTPServer
         "htt" => "text/webviewhtml", "ico" => "image/x-icon", "ief" => "image/ief", "iii" => "application/x-iphone", "ins" => "application/x-internet-signup", "isp" => "application/x-internet-signup", "jfif" => "image/pipeg", "jpe" => "image/jpeg", "jpeg" => "image/jpeg", "jpg" => "image/jpeg",
         "js" => "application/x-javascript", "latex" => "application/x-latex", "lha" => "application/octet-stream", "lsf" => "video/x-la-asf", "lsx" => "video/x-la-asf", "lzh" => "application/octet-stream", "m13" => "application/x-msmediaview", "m14" => "application/x-msmediaview", "m3u" => "audio/x-mpegurl", "man" => "application/x-troff-man",
         "mdb" => "application/x-msaccess", "me" => "application/x-troff-me", "mht" => "message/rfc822", "mhtml" => "message/rfc822", "mid" => "audio/mid", "mny" => "application/x-msmoney", "mov" => "video/quicktime", "movie" => "video/x-sgi-movie", "mp2" => "video/mpeg", "mp3" => "audio/mpeg",
+        'mp4' => 'video/mp4',
         "mpa" => "video/mpeg", "mpe" => "video/mpeg", "mpeg" => "video/mpeg", "mpg" => "video/mpeg", "mpp" => "application/vnd.ms-project", "mpv2" => "video/mpeg", "ms" => "application/x-troff-ms", "mvb" => "application/x-msmediaview", "nws" => "message/rfc822", "oda" => "application/oda",
+        'ogg' => 'video/ogg',
+        'ogv' => 'video/ogg',
         "p10" => "application/pkcs10", "p12" => "application/x-pkcs12", "p7b" => "application/x-pkcs7-certificates", "p7c" => "application/x-pkcs7-mime", "p7m" => "application/x-pkcs7-mime", "p7r" => "application/x-pkcs7-certreqresp", "p7s" => "application/x-pkcs7-signature", "pbm" => "image/x-portable-bitmap", "pdf" => "application/pdf", "pfx" => "application/x-pkcs12",
         "pgm" => "image/x-portable-graymap", "pko" => "application/ynd.ms-pkipko", "pma" => "application/x-perfmon", "pmc" => "application/x-perfmon", "pml" => "application/x-perfmon", "pmr" => "application/x-perfmon", "pmw" => "application/x-perfmon", "png" => "image/png", "pnm" => "image/x-portable-anymap", "pot" => "application/vnd.ms-powerpoint", "ppm" => "image/x-portable-pixmap",
         "pps" => "application/vnd.ms-powerpoint", "ppt" => "application/vnd.ms-powerpoint", "prf" => "application/pics-rules", "ps" => "application/postscript", "pub" => "application/x-mspublisher", "qt" => "video/quicktime", "ra" => "audio/x-pn-realaudio", "ram" => "audio/x-pn-realaudio", "ras" => "image/x-cmu-raster", "rgb" => "image/x-rgb",
@@ -480,6 +531,8 @@ class HTTPServer
         "sit" => "application/x-stuffit", "snd" => "audio/basic", "spc" => "application/x-pkcs7-certificates", "spl" => "application/futuresplash", "src" => "application/x-wais-source", "sst" => "application/vnd.ms-pkicertstore", "stl" => "application/vnd.ms-pkistl", "stm" => "text/html", "svg" => "image/svg+xml", "sv4cpio" => "application/x-sv4cpio",
         "sv4crc" => "application/x-sv4crc", "t" => "application/x-troff", "tar" => "application/x-tar", "tcl" => "application/x-tcl", "tex" => "application/x-tex", "texi" => "application/x-texinfo", "texinfo" => "application/x-texinfo", "tgz" => "application/x-compressed", "tif" => "image/tiff", "tiff" => "image/tiff",
         "tr" => "application/x-troff", "trm" => "application/x-msterminal", "tsv" => "text/tab-separated-values", "txt" => "text/plain", "uls" => "text/iuls", "ustar" => "application/x-ustar", "vcf" => "text/x-vcard", "vrml" => "x-world/x-vrml", "wav" => "audio/x-wav", "wcm" => "application/vnd.ms-works",
-        "wdb" => "application/vnd.ms-works", "wks" => "application/vnd.ms-works", "wmf" => "application/x-msmetafile", "wps" => "application/vnd.ms-works", "wri" => "application/x-mswrite", "wrl" => "x-world/x-vrml", "wrz" => "x-world/x-vrml", "xaf" => "x-world/x-vrml", "xbm" => "image/x-xbitmap", "xla" => "application/vnd.ms-excel",
+        "wdb" => "application/vnd.ms-works",
+        'webm' => 'video/webm',
+        "wks" => "application/vnd.ms-works", "wmf" => "application/x-msmetafile", "wps" => "application/vnd.ms-works", "wri" => "application/x-mswrite", "wrl" => "x-world/x-vrml", "wrz" => "x-world/x-vrml", "xaf" => "x-world/x-vrml", "xbm" => "image/x-xbitmap", "xla" => "application/vnd.ms-excel",
         "xlc" => "application/vnd.ms-excel", "xlm" => "application/vnd.ms-excel", "xls" => "application/vnd.ms-excel", "xlt" => "application/vnd.ms-excel", "xlw" => "application/vnd.ms-excel", "xof" => "x-world/x-vrml", "xpm" => "image/x-xpixmap", "xwd" => "image/x-xwindowdump", "z" => "application/x-compress", "zip" => "application/zip");    
 }
