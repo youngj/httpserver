@@ -112,7 +112,7 @@ class CGIStream
                     
                     if (isset($headers['Status']))
                     {
-                        $status_arr = explode(' ', $headers['Status'], 2);                    
+                        $status_arr = explode(' ', $headers['Status'][0], 2);                    
                         $status = (int) $status_arr[0];
                         $status_msg = trim($status_arr[1]);
                         unset($headers['Status']);

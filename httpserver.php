@@ -440,11 +440,11 @@ class HTTPServer
             'REMOTE_ADDR' => $request->remote_addr,
         );                
         
-        foreach ($request->headers as $name => $value)
+        foreach ($request->headers as $name => $values)
         {        
             $name = str_replace('-','_', $name);
             $name = strtoupper($name);
-            $cgi_env["HTTP_$name"] = $value;
+            $cgi_env["HTTP_$name"] = $values[0];
         }
         
         if ($cgi_env_override)
@@ -492,7 +492,16 @@ class HTTPServer
             if (sizeof($header_arr) == 2)
             {
                 $header_name = $header_arr[0];
-                $headers[$header_name] = $header_arr[1];
+                $value = $header_arr[1];
+                
+                if (!isset($headers[$header_name]))
+                {
+                    $headers[$header_name] = [$value];
+                }
+                else
+                {
+                    $headers[$header_name][] = $value;
+                }
             }
         }                
         return $headers;

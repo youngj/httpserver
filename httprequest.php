@@ -118,7 +118,7 @@ class HTTPRequest
 
                 if (isset($this->lc_headers['transfer-encoding']))
                 {
-                    $this->is_chunked = $this->lc_headers['transfer-encoding'] == 'chunked';
+                    $this->is_chunked = $this->lc_headers['transfer-encoding'][0] == 'chunked';
                     
                     unset($this->lc_headers['transfer-encoding']);
                     unset($this->headers['Transfer-Encoding']);
@@ -127,7 +127,7 @@ class HTTPRequest
                 }                
                 else
                 {                
-                    $this->content_len = (int)@$this->lc_headers['content-length'];
+                    $this->content_len = (int)@$this->lc_headers['content-length'][0];
                 }
                 
                 $start_content = $end_headers + 4; // $end_headers is before last \r\n\r\n
@@ -202,7 +202,7 @@ class HTTPRequest
                     if ($chunk_len_remaining == 0)
                     {
                         $this->cur_state = static::READ_COMPLETE;
-                        $this->headers['Content-Length'] = $this->lc_headers['content-length'] = $this->content_len;
+                        $this->headers['Content-Length'] = $this->lc_headers['content-length'] = [$this->content_len];
                         
                         // todo: this is where we should process trailers...
                         return;
@@ -251,7 +251,7 @@ class HTTPRequest
      */
     function get_header($name)
     {
-        return @$this->lc_headers[strtolower($name)];
+        return @$this->lc_headers[strtolower($name)][0];
     }
     
     /*

@@ -10,7 +10,7 @@ class HTTPResponse
 {
     public $status;                 // HTTP status code
     public $status_msg;             // HTTP status message
-    public $headers;                // associative array of HTTP headers 
+    public $headers;                // associative array of HTTP headers (name => list of values)
     
     public $content = '';           // response body, as string (optional)    
     public $stream = null;          // response body (or headers+body if prepend_headers is false) as stream
@@ -61,9 +61,19 @@ class HTTPResponse
     static function render_headers($headers)
     {
         ob_start();        
-        foreach ($headers as $name => $value)
+        foreach ($headers as $name => $values)
         {
-            echo "$name: $value\r\n";
+            if (is_array($values))
+            {
+                foreach ($values as $value)
+                {                
+                    echo "$name: $value\r\n";
+                }
+            }
+            else
+            {
+                echo "$name: $values\r\n";
+            }
         }
         echo "\r\n";        
         return ob_get_clean();
@@ -75,7 +85,7 @@ class HTTPResponse
 
         if (!isset($headers['Content-Length']))
         {
-            $headers['Content-Length'] = $this->get_content_length();
+            $headers['Content-Length'] = [$this->get_content_length()];
         }        
         
         return  static::render_status($this->status, $this->status_msg).
