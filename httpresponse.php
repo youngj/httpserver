@@ -85,7 +85,7 @@ class HTTPResponse
 
         if (!isset($headers['Content-Length']))
         {
-            $headers['Content-Length'] = [$this->get_content_length()];
+            $headers['Content-Length'] = array($this->get_content_length());
         }        
         
         return  static::render_status($this->status, $this->status_msg).

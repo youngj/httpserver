@@ -202,7 +202,7 @@ class HTTPRequest
                     if ($chunk_len_remaining == 0)
                     {
                         $this->cur_state = static::READ_COMPLETE;
-                        $this->headers['Content-Length'] = $this->lc_headers['content-length'] = [$this->content_len];
+                        $this->headers['Content-Length'] = $this->lc_headers['content-length'] = array($this->content_len);
                         
                         // todo: this is where we should process trailers...
                         return;
