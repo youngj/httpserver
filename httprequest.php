@@ -85,6 +85,11 @@ class HTTPRequest
             
                 $header_buf .= $data;
                        
+                if (strlen($header_buf) < 4)
+                {
+                    break;
+                }
+                       
                 $end_headers = strpos($header_buf, "\r\n\r\n", 4);
                 if ($end_headers === false)
                 {
