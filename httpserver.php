@@ -496,7 +496,7 @@ class HTTPServer
                 
                 if (!isset($headers[$header_name]))
                 {
-                    $headers[$header_name] = [$value];
+                    $headers[$header_name] = array($value);
                 }
                 else
                 {
